@@ -434,6 +434,14 @@ static int ws_mod_world_scene(void) {
 static int ws_game_mode(void) {
     if (ws_mod_world_scene()) return 1;
     if (ws_local_native_split()) return 1;
+    static int s_force_full = -1;
+    if (s_force_full < 0) {
+        const char *e1 = getenv("PSX_WS_FORCE_2D");
+        const char *e2 = getenv("PSX_WS_FORCE_FULLSCREEN");
+        const char *e3 = getenv("PSX_WS_FORCE_3D");
+        s_force_full = ((e1 && e1[0] == '1') || (e2 && e2[0] == '1') || (e3 && e3[0] == '1')) ? 1 : 0;
+    }
+    if (s_force_full) return 1;
     int state_match = ws_gameplay_state_matches();
     if (state_match >= 0) return state_match;
     if (ws_full_2d_mode()) return 1;
@@ -476,6 +484,14 @@ static WsSceneLatch ws_scene_latch;
  * overhead village: a 384px image, fence/sign quads out to x=428). */
 static WsBackdropExtent ws_bdx;
 static int ws_2d_only_scene(void) {
+    static int s_force_full = -1;
+    if (s_force_full < 0) {
+        const char *e1 = getenv("PSX_WS_FORCE_2D");
+        const char *e2 = getenv("PSX_WS_FORCE_FULLSCREEN");
+        const char *e3 = getenv("PSX_WS_FORCE_3D");
+        s_force_full = ((e1 && e1[0] == '1') || (e2 && e2[0] == '1') || (e3 && e3[0] == '1')) ? 1 : 0;
+    }
+    if (s_force_full) return 0;
     if (ws_mod_world_scene()) return 0;
     if (ws_local_native_split()) return 0;
     if (ws_full_2d_mode() || ws_gte_game_mode_cfg) return 0;
@@ -522,6 +538,22 @@ int gpu_ws_present_native_43(void) {
     if (!ws_engaged()) return 0;
     if (s_ws_native_scene_predicate && s_ws_native_scene_predicate())
         return 1;
+    static int s_force_full = -1;
+    if (s_force_full < 0) {
+        const char *e1 = getenv("PSX_WS_FORCE_2D");
+        const char *e2 = getenv("PSX_WS_FORCE_FULLSCREEN");
+        const char *e3 = getenv("PSX_WS_FORCE_3D");
+        s_force_full = ((e1 && e1[0] == '1') || (e2 && e2[0] == '1') || (e3 && e3[0] == '1')) ? 1 : 0;
+    }
+    uint32_t f_chk = (uint32_t)s_frame_count;
+    if (f_chk != s_ws_fmv_frame_cache) {
+        s_ws_fmv_frame_cache = f_chk;
+        GpuDisplayInfo di; gpu_get_display_info(&di);
+        s_ws_fmv_cached = di.depth24 || mdec_recently_active(WS_FMV_HYSTERESIS);
+    }
+    if (s_force_full) {
+        return s_ws_fmv_cached;
+    }
     int game_mode = ws_game_mode();
     if (!game_mode) ws_scene_latch.confirmed = 0;
     int native_43 = !game_mode || ws_2d_only_scene();

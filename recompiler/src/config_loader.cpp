@@ -3326,6 +3326,9 @@ UserSettings load_user_settings(const fs::path& path) {
         if (l.contains("skip_launcher")) try_get([&]{
             s.skip_launcher = toml::find<bool>(l, "skip_launcher"); s.has_skip_launcher = true;
         });
+        if (l.contains("freeze_heartbeat")) try_get([&]{
+            s.freeze_heartbeat = toml::find<bool>(l, "freeze_heartbeat"); s.has_freeze_heartbeat = true;
+        });
     }
     if (doc.contains("netplay")) {
         const toml::value& n = toml::find(doc, "netplay");
@@ -3577,8 +3580,13 @@ bool save_user_settings(const fs::path& path, const UserSettings& s) {
             f << "fast_forward_toggle_pad = "
               << s.hotkey_pad_fast_forward_toggle << "\n";
     }
-    if (s.has_skip_launcher)
-        f << "\n[launcher]\nskip_launcher = " << (s.skip_launcher ? "true" : "false") << "\n";
+    if (s.has_skip_launcher || s.has_freeze_heartbeat) {
+        f << "\n[launcher]\n";
+        if (s.has_skip_launcher)
+            f << "skip_launcher = " << (s.skip_launcher ? "true" : "false") << "\n";
+        if (s.has_freeze_heartbeat)
+            f << "freeze_heartbeat = " << (s.freeze_heartbeat ? "true" : "false") << "\n";
+    }
     if ((s.has_netplay_player_name && !s.netplay_player_name.empty()) ||
         (s.has_netplay_lobby_url && !s.netplay_lobby_url.empty())) {
         f << "\n[netplay]\n";

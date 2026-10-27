@@ -17679,8 +17679,8 @@ int main(int argc, char** argv) {
      * game.toml offer flags remain parseable for old projects but deliberately
      * cannot expose generic launcher controls or activate the features. Trusted
      * activation plugins apply them after launcher/settings resolution. */
-    constexpr bool ws_offered = false;
-    constexpr bool ws_ultrawide_offered = false;
+    constexpr bool ws_offered = true;
+    constexpr bool ws_ultrawide_offered = true;
     constexpr bool frame_interpolation_offered = false;
     constexpr bool skip_fmv_offered = false;
     /* Load acceleration is likewise mod-owned (Fast Loading / CD Speed). The
@@ -18413,6 +18413,7 @@ int main(int argc, char** argv) {
      * the command line (--bios/--disc) still wins over the file. Absent =>
      * fall through to game.toml. The file is the launcher's persistence. */
     bool skip_launcher_setting = false;  /* [launcher] skip_launcher from settings.toml */
+    bool freeze_heartbeat_setting = false; /* [launcher] freeze_heartbeat from settings.toml */
     std::string settings_bios_storage;  /* must outlive resolve_bios_for_runtime */
     std::string netplay_player_name;     /* [netplay] player_name from settings.toml */
     bool has_netplay_player_name = false;
@@ -18449,6 +18450,7 @@ int main(int argc, char** argv) {
                 "again from the launcher (a fresh settings.toml will be written).");
         }
         if (us.has_skip_launcher)  skip_launcher_setting = us.skip_launcher;
+        if (us.has_freeze_heartbeat) freeze_heartbeat_setting = us.freeze_heartbeat;
         if (us.has_renderer) {
             if (us.renderer == 2 && !vulkan_offered) {
                 g_video_renderer = 1;
@@ -18688,6 +18690,13 @@ int main(int argc, char** argv) {
      * PSX_LOW_LATENCY_INPUT=0/1 ; PSX_VSYNC=1(vsync)/0(immediate)/-1(adaptive)
      * (vsync XOR wall-clock pacer — vsync clocks only ~60 Hz panels);
      * PSX_FRAME_INTERPOLATION=0/1; PSX_FRAME_INTERPOLATION_FPS=0|90+. */
+    if (const char *e = std::getenv("PSX_ASPECT_RATIO")) {
+        int an = 0, ad = 0;
+        if (std::sscanf(e, "%d:%d", &an, &ad) == 2 && an > 0 && ad > 0) {
+            g_video_aspect_num = an;
+            g_video_aspect_den = ad;
+        }
+    }
     if (const char *e = std::getenv("PSX_LOW_LATENCY_INPUT")) g_low_latency_input = atoi(e) ? 1 : 0;
     if (const char *e = std::getenv("PSX_VSYNC"))             g_video_vsync       = atoi(e);
     if (const char *e = std::getenv("PSX_SMOOTH_60FPS"))
@@ -19123,6 +19132,7 @@ int main(int argc, char** argv) {
             seed.fast_forward_toggle_mode = g_fast_forward_toggle_mode;
             seed.has_fast_forward_mode = true;
             seed.skip_launcher = skip_launcher_setting;   seed.has_skip_launcher = true;
+            seed.freeze_heartbeat = freeze_heartbeat_setting; seed.has_freeze_heartbeat = true;
             if (has_netplay_player_name) {
                 seed.netplay_player_name = netplay_player_name;
                 seed.has_netplay_player_name = true;
@@ -19262,6 +19272,7 @@ int main(int argc, char** argv) {
                 }
             }
             ls.skip_launcher  = seed.skip_launcher ? 1 : 0;
+            ls.freeze_heartbeat = seed.freeze_heartbeat ? 1 : 0;
             ls.msu1_enabled   = 0;
             ls.msu1_dir[0]    = '\0';
             std::snprintf(ls.netplay_player_name, sizeof(ls.netplay_player_name), "%s",
@@ -19560,6 +19571,7 @@ int main(int argc, char** argv) {
                 }
                 seed.fullscreen    = ls.fullscreen;            seed.has_fullscreen = true;
                 seed.skip_launcher = ls.skip_launcher != 0;   seed.has_skip_launcher = true;
+                seed.freeze_heartbeat = ls.freeze_heartbeat != 0; seed.has_freeze_heartbeat = true;
                 /* aspect_index round-trips 0/1/2 -> 4:3 / 16:9 / 21:9, superseding the
                  * legacy ls.widescreen bool (still set above for older callers). */
                 switch (ls.aspect_index) {
@@ -19904,6 +19916,7 @@ int main(int argc, char** argv) {
                 g_fast_forward_preference = psx_fast_forward_preference(seed.fast_forward_speed);
                 g_fast_forward_toggle_mode = seed.fast_forward_toggle_mode;
                 skip_launcher_setting = seed.skip_launcher;
+                freeze_heartbeat_setting = seed.freeze_heartbeat;
                 if (seed.has_bios_path) {
                     settings_bios_storage = seed.bios_path.string();
                     bios_path = settings_bios_storage.c_str();
@@ -20739,8 +20752,14 @@ session_reboot:
 #ifdef PSX_COSIM
         cosim_init();  /* first-divergence oracle server */
 #endif
-        /* Heartbeat always on — see freeze_heartbeat.c rationale. */
-        freeze_heartbeat_start("psx-runtime");
+        /* Heartbeat diagnostics — disabled by default; toggleable via launcher or PSX_FREEZE_HEARTBEAT env var */
+        bool want_heartbeat = freeze_heartbeat_setting;
+        if (const char* env_hb = std::getenv("PSX_FREEZE_HEARTBEAT")) {
+            want_heartbeat = (env_hb[0] != '0' && env_hb[0] != '\0');
+        }
+        if (want_heartbeat) {
+            freeze_heartbeat_start("psx-runtime");
+        }
     } else {
 #ifndef PSX_NO_DEBUG_TOOLS
         (void)debug_port;
@@ -21863,6 +21882,8 @@ soft_return_lobby:
         ls.fast_forward_toggle_mode = g_fast_forward_toggle_mode ? 1 : 0;
         ls.auto_skip_fmv = (skip_fmv_offered && g_auto_skip_fmv) ? 1 : 0;
         ls.turbo_loads = (turbo_loads_offered && g_turbo_loads_enabled) ? 1 : 0;
+        ls.skip_launcher = skip_launcher_setting ? 1 : 0;
+        ls.freeze_heartbeat = freeze_heartbeat_setting ? 1 : 0;
         ls.assist_pad_bind[PSX_ASSIST_BIND_REWIND] =
             normalize_hotkey_pad_binding(
                 g_hotkey_pad_rewind,
@@ -22263,6 +22284,9 @@ soft_return_lobby:
                 us.has_fullscreen = true;
                 us.window_width = ls.window_width > 0 ? ls.window_width : g_video_win_w;
                 us.has_window_width = true;
+                us.freeze_heartbeat = ls.freeze_heartbeat != 0;
+                us.has_freeze_heartbeat = true;
+                freeze_heartbeat_setting = us.freeze_heartbeat;
                 switch (ls.aspect_index) {
                     case 2:  us.aspect_num = 21; us.aspect_den = 9; break;
                     case 1:  us.aspect_num = 16; us.aspect_den = 9; break;

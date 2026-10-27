@@ -1618,6 +1618,8 @@ struct UserSettings {
     // launcher window (mirrors snesrecomp's SkipLauncher). Overridable per-run:
     // `--launcher` forces the GUI back on; `PSX_NO_LAUNCHER=1` forces it off.
     bool has_skip_launcher  = false; bool skip_launcher  = false;
+    // [launcher] freeze_heartbeat: periodically writes psx_freeze_heartbeat.json (default false)
+    bool has_freeze_heartbeat = false; bool freeze_heartbeat = false;
     // [netplay] — display name for lobby browser / room. Prompted once on first
     // Netplay Lobbies visit; Change Player Name updates it.
     bool has_netplay_player_name = false; std::string netplay_player_name;

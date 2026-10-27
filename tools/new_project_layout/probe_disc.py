@@ -411,6 +411,23 @@ def probe(cue_path: Path, *, identity_only: bool = False) -> DiscProbe:
         root += read_user(data, root_extent + i)
     entries = parse_root_entries(bytes(root[:root_size]))
 
+    # Scan subdirectories if boot file might be located in a subfolder (e.g. Tekken 3)
+    extra = {}
+    for name, (ext, fsz) in list(entries.items()):
+        try:
+            sub_buf = bytearray()
+            for bi in range((fsz + USER - 1) // USER):
+                sub_buf += read_user(data, ext + bi)
+            sub_parsed = parse_root_entries(bytes(sub_buf[:fsz]))
+            for sname, sinfo in sub_parsed.items():
+                if sname not in entries and sname not in extra:
+                    extra[sname] = sinfo
+                    extra[f'{name}/{sname}'] = sinfo
+                    extra[f'{name}\\{sname}'] = sinfo
+        except Exception:
+            continue
+    entries.update(extra)
+
     if "SYSTEM.CNF" not in entries:
         # Very early titles (e.g. King's Field, Dec 1994) ship no SYSTEM.CNF;
         # the BIOS falls back to booting PSX.EXE from the root directory.
