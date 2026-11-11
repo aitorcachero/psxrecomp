@@ -3407,6 +3407,11 @@ static int dirty_ram_dispatch_inner(CPUState* cpu, uint32_t addr, uint32_t stop_
         { extern void cosim_block(uint32_t); cosim_block(pc); }
 #endif
         uint32_t insn = fetch_word(pc & 0x1FFFFFFFu);
+        if ((pc & 0x1FFFFFFFu) == 0x00098BC0u && insn == 0x10620003u) {
+            insn = 0x10000003u; /* LibCrypt: force branch to 0x80098BD0 */
+        } else if ((pc & 0x1FFFFFFFu) == 0x00098BC8u && insn == 0x080262F2u) {
+            insn = 0x080262F4u; /* LibCrypt: break hang, jump to 0x80098BD0 */
+        }
 #ifndef PSX_NO_DEBUG_TOOLS
         uint32_t before_s0 = cpu->gpr[16];
         uint32_t before_ra = cpu->gpr[31];

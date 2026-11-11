@@ -194,7 +194,8 @@ static void append_hex_bytes(char *buf, size_t cap, size_t *pos,
 
 static void append_ram_peek(char *buf, size_t cap, size_t *pos,
                             const char *key, uint32_t vaddr, int want, int comma) {
-    uint8_t tmp[64];
+    uint8_t tmp[128];
+    if (want > 128) want = 128;
     int n = crash_peek_guest(vaddr, tmp, want);
     append_fmt(buf, cap, pos,
                "%s\"%s\":{\"addr\":\"0x%08X\",\"len\":%d,\"hex\":\"",
@@ -577,6 +578,9 @@ void psx_crash_trace_dump(const char *reason, void *seh_info) {
         else
             append_str(buf, sizeof(buf), &pos,
                        ",\"jal_target\":{\"addr\":\"0x00000000\",\"len\":0,\"hex\":\"\"}");
+        uint32_t pc = debug_cpu_ptr ? (debug_cpu_ptr->pc & ~3u) : 0;
+        uint32_t pc_peek = (pc >= 64u) ? (pc - 64u) : pc;
+        append_ram_peek(buf, sizeof(buf), &pos, "pc", pc_peek, 128, 1);
         append_ram_peek(buf, sizeof(buf), &pos, "overlay_80165000",
                         0x80165000u, 64, 1);
         {
